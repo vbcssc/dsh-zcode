@@ -6,7 +6,7 @@
 ## 一、装进 profile（持久）
 
 ```sh
-dsh plugin --profile web add file:D:/docker_and_big_models/开源仓库-分析区/zcode-dsh
+dsh plugin --profile web add file:D:/docker_and_big_models/开源仓库-分析区/dsh-zcode
 ```
 
 进 Web 界面后在预设菜单选 **「ZCode 模式」**。
