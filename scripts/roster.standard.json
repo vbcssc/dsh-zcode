@@ -1,0 +1,31 @@
+{
+  "recordedFrom": "standard preset, live boot",
+  "platform": "win32",
+  "tools": [
+    "ask_user_question",
+    "create_goal",
+    "edit",
+    "exit_plan_mode",
+    "get_goal",
+    "glob",
+    "grep",
+    "interrupt_agent",
+    "job_kill",
+    "job_list",
+    "job_output",
+    "list_agents",
+    "present",
+    "pwsh",
+    "read",
+    "read_image",
+    "send_message",
+    "skill",
+    "subagent_fork",
+    "todo_write",
+    "update_goal",
+    "web_fetch",
+    "web_search",
+    "workflow",
+    "write"
+  ]
+}

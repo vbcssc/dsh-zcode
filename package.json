@@ -1,0 +1,45 @@
+{
+  "name": "dsh-zcode-mode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZCode 模式 — 不改 DeepSeek Harness 源码，以一个外部 bundle 补齐 ZCode 有而 dsh 出厂没有的三层：身份与行为约束 persona、处境注入（工作目录 / git 快照 / 日期）、具名子代理。",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./situation": "./src/situation.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "text",
+    "cordis.patch.yml",
+    "INSTALL.md",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "preset": "node scripts/make-preset.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "unit": "node scripts/unit-situation.mjs",
+    "verify": "node scripts/verify-mount.mjs"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-agent-preset": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-persona": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-subagent": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.4"
+  }
+}
