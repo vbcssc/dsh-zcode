@@ -1,4 +1,4 @@
-# ZCode 模式（dsh-zcode-mode）
+# ZCode 模式（dsh-zcode）
 
 不改 DeepSeek Harness 源码，用一个**外部 bundle** 把 ZCode 的 agent 模式形状补到 dsh 上。
 dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描述；ZCode 在会话开场还会注入行为与
@@ -81,11 +81,15 @@ shell `disabled:` 门（`bash` 恒挂载、`pwsh` 恒不挂载，win32 因此走
 ```sh
 npm run preset      # 生成 cordis.patch.yml
 npm run doctor      # 离线门（11 项）
-npm run unit        # 处境层纯函数 + 花括号护栏（18 项）
+npm run unit        # 处境层纯函数 + 花括号护栏（19 项）
 npm run unit:guard  # 守卫纯函数 + 接线（35 项）
 npm run e2e:guard   # 真实 AgentLoop 端到端负控（4 项）
-npm run verify      # 真装真起，读活注册表（21 项）
+npm run verify      # 真装真起，读活注册表（20 项；跨平台少一项 roster 对比，见脚本内注释）
 ```
+
+上面括号里的项数是**数出来的**：`check(` / `test(` / `scenario(` 的调用点，与各脚本最后一行打印的
+`ALL PASS (N)` 同一口径。`verify` 的 roster 对比只在录制平台与当前平台一致时才执行，换平台会
+变成 19 项并打印一行 `NOTE`，所以别把这两个数字互相引用。
 
 安装、试用、升级、回滚与故障处置的唯一事实来源是 [INSTALL.md](INSTALL.md)，本文件不重复。
 
