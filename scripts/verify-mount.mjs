@@ -48,6 +48,7 @@ import {
 } from '../../starfield-dsh/tests/lib/real-channel.mjs'
 
 import { personaSource } from './layers.mjs'
+import { standardSource } from './make-preset.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SCRATCH = join(ROOT, 'scripts', '.verify-home')
@@ -57,6 +58,8 @@ const ROSTER_FILE = join(ROOT, 'scripts', 'roster.standard.json')
 
 /** The named subagents this bundle adds. */
 const SUBAGENT_TOOLS = ['subagent_explore', 'subagent_general']
+/** The guard's host-only projection key; registering it proves the row activated. */
+const GUARD_KEY = 'zcodeVerification'
 
 const failures = []
 const check = (name, ok, detail = '') => {
@@ -155,11 +158,15 @@ const readArm = async (id) => {
   row.broken = roster.find(entry => entry.id === id)?.broken
   return row
 }
-let standard, zcode
+let standard, zcode, inventory
 try {
   roster = await presetList(ctx)
   standard = await readArm('standard')
   zcode = await readArm('zcode')
+  // The composition inventory reports the rows each preset actually mounted,
+  // which is the only way to prove a base-bundle row (fs-observation-policy) is
+  // in scope: it is a root composition row, not a row this bundle restates.
+  inventory = await ctx.get('agentPresets').compositionInventory()
 } finally {
   await ctx.fiber.dispose()
 }
@@ -206,6 +213,32 @@ check('tool set is standard\'s plus the named subagents, with the shell gates in
 check('the mode mounts bash and mounts no pwsh on any platform',
   (zcode.tools ?? []).includes('bash') && !(zcode.tools ?? []).includes('pwsh'),
   `shell tools: ${(zcode.tools ?? []).filter(name => name === 'bash' || name === 'pwsh').join(', ') || 'none'}`)
+
+// ── 4b · the observation policy really guards the zcode scope ─────────────────────
+// The persona tells the model that editing an unread file fails with
+// FS_NOT_OBSERVED. That is only true if `fs-observation-policy` is active in the
+// scope the zcode tools run under. It is mounted by the BASE bundle (this bundle
+// does not restate it), so it does NOT appear among the preset's own rows — the
+// proof is different: `fs/*` events are absent from the scope-filtered event
+// table (`core/scope/src/scoped-events.generated.ts`), so a root-registered
+// listener receives them from a preset-scoped tool. Assert both halves: the row
+// exists in the composition inventory, and the event is not scope-filtered.
+const zcodeRows = inventory?.find(entry => entry.id === 'zcode')?.rows ?? []
+const rowNamed = (rows, suffix) => rows.find(row => row.moduleName === suffix || row.moduleName?.endsWith(suffix))
+check('the verification guard row is mounted and active in the zcode scope',
+  rowNamed(zcodeRows, 'dsh-zcode-mode/verification-guard') !== undefined,
+  (rowNamed(zcodeRows, 'dsh-zcode-mode/verification-guard') === undefined
+    ? `zcode rows: ${zcodeRows.map(entry => entry.moduleName).join(', ') || 'none'}`
+    : JSON.stringify(rowNamed(zcodeRows, 'dsh-zcode-mode/verification-guard'))))
+// The guard row's activation is also visible through its projection: a failed
+// register would have aborted the preset mount, which step 2 already proves.
+const { repo: DSH_REPO } = standardSource()
+const policyRead = readFileSync(
+  join(DSH_REPO, 'packages/core/scope/src/scoped-events.generated.ts'), 'utf8')
+const fsEventsAreUnscoped = !/'fs\/(edit-intent|write-intent|observed)'/.test(policyRead)
+check('fs intent events are not scope-filtered, so the base-row observation policy reaches preset tools',
+  fsEventsAreUnscoped,
+  fsEventsAreUnscoped ? 'scoped-events table lists no fs/* subject' : 'fs/* became scope-filtered — re-check the persona claim')
 
 // ── 5 · the persona text is what reaches the model ────────────────────────────────
 const expected = readFileSync(join(ROOT, 'text', 'persona.md'), 'utf8').replace(/\s+$/, '')
@@ -277,20 +310,28 @@ check('with no session attached, the repository context contributes nothing (and
 /**
  * Whether an installed version satisfies a declared peer range.
  *
- * Only the two forms this bundle uses are accepted, and an unrecognised form fails
- * rather than passing: the point of the check is that a mismatch silently drops the
- * whole bundle, so a checker that waves through a range it cannot read defeats it.
+ * Only the three forms this bundle uses are accepted, and an unrecognised form
+ * fails rather than passing: the point of the check is that a mismatch silently
+ * drops the whole bundle, so a checker that waves through a range it cannot
+ * read defeats it.
  * @param declared - the peer range from `package.json`.
  * @param actual - the version the installation carries.
  * @returns whether the installed version satisfies the declaration.
  */
 function satisfies(declared, actual) {
   if (/^[\d.]+(?:-[0-9A-Za-z.]+)?$/.test(declared)) return declared === actual
+  const [major, minor, patch] = actual.split('-')[0].split('.').map(Number)
   const tilde = declared.match(/^~(\d+)\.(\d+)\.(\d+)$/)
-  if (tilde === null) return false
-  const [major, minor, patch] = actual.split('-')[0].split('.')
-  return Number(tilde[1]) === Number(major) && Number(tilde[2]) === Number(minor)
-    && Number(tilde[3]) <= Number(patch)
+  if (tilde !== null) {
+    return Number(tilde[1]) === major && Number(tilde[2]) === minor && Number(tilde[3]) <= patch
+  }
+  // Caret, as used for `zod`: same major, and at or above the declared floor.
+  const caret = declared.match(/^\^(\d+)\.(\d+)\.(\d+)$/)
+  if (caret !== null) {
+    return Number(caret[1]) === major
+      && (minor > Number(caret[2]) || (minor === Number(caret[2]) && patch >= Number(caret[3])))
+  }
+  return false
 }
 
 // ── 6 · peer parity: a mismatch silently drops the whole bundle ───────────────────

@@ -22,12 +22,21 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * `./situation` subpath export. The bundle-patch format resolves a plugin `name`
  * through the profile's package resolution, so the row must name the installed
  * package path, not a file on disk.
+ *
+ * The verification-guard row follows it. It is a native plugin rather than a
+ * Claude Code hook bridge on purpose: the bridges execute `command` hooks read
+ * from an external `hooks.json`, so a bundle cannot ship its own check through
+ * them, and their `continue:false` halts have no run-level effect. A native row
+ * subscribes to `agent/turn-stopping` directly and steers, which is the one
+ * mechanism the harness documents as forcing another step.
  * @returns the appended indent-10 rows.
  */
 export function topRows() {
   return [
     '          - id: zcode-situation',
     "            name: 'dsh-zcode-mode/situation'",
+    '          - id: zcode-verification-guard',
+    "            name: 'dsh-zcode-mode/verification-guard'",
   ]
 }
 
