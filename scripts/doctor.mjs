@@ -133,10 +133,41 @@ check('the preset inverts the shipped shell gates (bash enabled everywhere, pwsh
   `tool-bash: ${gateOf('tool-bash') ?? 'row not found'}, tool-pwsh: ${gateOf('tool-pwsh') ?? 'row not found'}`)
 // A named subagent's tool description is the shipped generic wording — identical for
 // every row (measured by `verify-mount.mjs`) — so the persona is the only surface where
-// the model learns what each named subagent is for.
-check('persona names each named subagent exactly once',
-  SUBAGENT_PERSONAS.every(name => persona.split(`subagent_${name}`).length - 1 === 1),
-  SUBAGENT_PERSONAS.map(name => `subagent_${name} ×${persona.split(`subagent_${name}`).length - 1}`).join(', '))
+// the model learns what each named subagent is for. Both names must appear, and every
+// mention must sit inside the `# Delegation` section: a name dropped elsewhere (a tool
+// inventory, an example) would teach the model the wrong thing about why it exists.
+const delegationSection = persona.match(/^# Delegation$([\s\S]*?)(?=^# |(?![\s\S]))/m)?.[1] ?? ''
+check('persona names each named subagent, and only inside the Delegation section',
+  SUBAGENT_PERSONAS.every(name => delegationSection.includes(`subagent_${name}`))
+    && SUBAGENT_PERSONAS.every(name => persona.split(`subagent_${name}`).length - 1
+      === delegationSection.split(`subagent_${name}`).length - 1),
+  SUBAGENT_PERSONAS.map((name) => {
+    const total = persona.split(`subagent_${name}`).length - 1
+    const inside = delegationSection.split(`subagent_${name}`).length - 1
+    return `subagent_${name} ×${total} (${inside} in Delegation)`
+  }).join(', '))
+
+// Children inherit the parent's whole tool set (no `agentPreset`), so the delegation
+// brief is the ONLY place a constraint on a child can live. That makes two statements
+// load-bearing and easy to lose in an edit: that the inheritance exists, and that the
+// brief must carry the constraints. Both are asserted on the persona text because a
+// persona that quietly stopped saying either would leave the model delegating without
+// them — the child would then write files a research task must not touch.
+check('persona states that children inherit the full tool set',
+  /inherit(?:s)? (?:your )?(?:complete|full) tool set/i.test(persona),
+  (persona.match(/[^.]*inherit[^.]*\./i)?.[0] ?? 'no inheritance statement').trim().slice(0, 120))
+check('persona tells the model to put constraints in the delegation brief',
+  /constraints/i.test(persona) && /brief/i.test(persona),
+  `mentions brief: ${/brief/i.test(persona)}, constraints: ${/constraints/i.test(persona)}`)
+
+// The explore brief must name the read-only constraint explicitly; the child has
+// `write`/`edit` mounted and will use them if the brief does not forbid it. Matched
+// within ONE sentence of the tool name: a looser window reaches the general
+// constraints paragraph far below and would pass even after the pairing was deleted.
+const exploreReadOnlyPairing = persona.match(/`subagent_explore`[^.]*\./)?.[0] ?? ''
+check('persona pairs subagent_explore with its read-only brief constraint',
+  /read-only/i.test(exploreReadOnlyPairing),
+  exploreReadOnlyPairing === '' ? 'tool name absent' : exploreReadOnlyPairing.trim().slice(0, 140))
 
 process.stdout.write(`\ndoctor (${ROOT}): ${failures.length === 0 ? 'ALL PASS' : `${failures.length} FAILURE(S)`}\n`)
 if (failures.length > 0) process.exitCode = 1

@@ -46,13 +46,13 @@ dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描�
 
 | 量 | standard | zcode |
 |---|---|---|
-| 装配 persona | 54 字符 | **9158** 字符（+9104） |
-| 整段 system prompt | 5736 字符 | **14717** 字符（+8981） |
+| 装配 persona | 54 字符 | **9612** 字符（+9558） |
+| 整段 system prompt | 5736 字符 | **15171** 字符（+9435） |
 | 可见工具 | 31 | **33**（+`subagent_explore`、+`subagent_general`、+`bash`、−`pwsh`） |
 | 处境 context 段 | 无 | 3 条，空 session 时 159 字符 |
 | 守卫投影 | 无 | `zcodeVerification`（host-only，随 session 落盘） |
 
-`+8981` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+9104`，加上
+`+9435` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+9558`，加上
 `tool:subagent` 指引句从两个委派工具名扩到四个（139 → 183，+44），再加上 shell 指引随门控
 反转发生的互换 `tool:pwsh`(259) → `tool:bash`(92)，净 −167。两条具名子代理各自注册的
 `tool:subagent_*` 段存在但渲染为空串（0 字符）——0.2.1 只让字母序第一条委派行输出那句话，
@@ -66,7 +66,7 @@ dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描�
 
 ```
 package.json              dsh.bundle.patch → cordis.patch.yml；exports "./situation"、"./verification-guard"
-text/persona.md           主控 persona 唯一真源（9158 字符）
+text/persona.md           主控 persona 唯一真源（9612 字符）
 src/situation.js          处境插件：注册 3 条 context
 src/verification-guard.js 硬校验插件：投影折叠 + turn 边界 steer
 scripts/make-preset.mjs   cordis.patch.yml 的唯一写入者
@@ -101,22 +101,25 @@ npm run doctor      # 离线门（14 项）
 npm run unit        # 处境层纯函数 + 花括号护栏（19 项）
 npm run unit:guard  # 守卫纯函数 + 接线（35 项）
 npm run e2e:guard   # 真实 AgentLoop 端到端负控（4 项）
-npm run verify      # 真装真起，读活注册表（23 项；跨平台少一项 roster 对比，见脚本内注释）
+npm run verify      # 真装真起，读活注册表（26 项；跨平台少一项 roster 对比，见脚本内注释）
 ```
 
 上面括号里的项数是**数出来的**：`check(` / `test(` / `scenario(` 的调用点，与各脚本最后一行打印的
 `ALL PASS (N)` 同一口径。`verify` 的 roster 对比只在录制平台与当前平台一致时才执行，换平台会
-变成 22 项并打印一行 `NOTE`，所以别把这两个数字互相引用。
+变成 25 项并打印一行 `NOTE`，所以别把这两个数字互相引用。
 
 安装、试用、升级、回滚与故障处置的唯一事实来源是 [INSTALL.md](INSTALL.md)，本文件不重复。
 
 ## 已知边界（不要再往外推）
 
-1. **具名子代理没有自己的 persona。** 不写 `agentPreset` 时子代理直接加入父预设，所以它的
-   行为完全由父 persona 与出厂通用委派描述决定；实测 `subagent_explore` 与 `subagent_general`
-   的父可见描述是同一段出厂文案（各 560 字符、逐字节相同）。主控能区分两者的唯一依据是
-   persona 里的 `# Delegation` 段——doctor 断言该段点名两条工具且各一次。要恢复子代理专属
-   persona，就得改回 `agentPreset` 并自己补齐工具面（见边界 2 的取舍）。
+1. **具名子代理没有自己的 persona，约束只能写进委派 brief。** 不写 `agentPreset` 时子代理
+   直接加入父预设，所以它的行为完全由父 persona 与出厂通用委派描述决定；实测
+   `subagent_explore` 与 `subagent_general` 的父可见描述是同一段出厂文案（各 560 字符、
+   逐字节相同）。这意味着**两个名字本身不携带任何行为差异**——「explore 只读」不是子代理的
+   属性，而是主控必须在 brief 里写下的约束。persona 的 `# Delegation` 段因此被写成三段式
+   委派模板（目标与路径 / 验收条件 / 约束），并明说「你没写下的约束对子代理不存在」，
+   doctor 有三条断言守着这层意思不丢失。真要有持久的子侧 persona，只能改回 `agentPreset`
+   并自己补齐工具面（见边界 2 的取舍）。
 2. **子代理的工具集 = 父的工具集，这是刻意的。** 0.2.1 的 `tool-subagent` 只接受
    `provider` / `toolName` / `modelSelectionSettings` / `agentOptions` / `agentPreset` /
    `allowedAgentPresets` / `maxDepth`；`persona`、`toolFilter`、`backgroundMode` 已移除。
