@@ -25,11 +25,12 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
-  delegationRows as layerDelegationRows, topRows as layerTopRows,
+  delegationRows as layerDelegationRows,
+  topRows as layerTopRows,
 } from './layers.mjs'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -38,6 +39,11 @@ export const PRESET_PATH = join(ROOT, 'cordis.patch.yml')
 /** The tool names a live standard boot mounted, recorded by `verify-mount.mjs`. */
 export const ROSTER_FILE = join(ROOT, 'scripts', 'roster.standard.json')
 export const STANDARD_RELATIVE = 'packages/bundle/web-app/presets/standard.patch.yml'
+/**
+ * The installed 0.2.1 layout: the web bundle was renamed from `dsh-bundle-web-app` to
+ * `dsh-web-app`, so the shipped standard lives at a shallower path than the checkout's.
+ */
+export const STANDARD_INSTALLED_RELATIVE = 'presets/standard.patch.yml'
 
 /** Preset identity this bundle contributes; the child list stays standard's. */
 export const PRESET = {
@@ -48,15 +54,32 @@ export const PRESET = {
   description: '标准工具集之上的 ZCode 形状：身份与行为约束 persona、处境注入、具名子代理；不改动 Harness 源码。',
 }
 
-/** The dsh checkout to derive from; `$DSH_REPO` overrides for another layout. */
+/**
+ * Locate the shipped standard preset to derive from.
+ *
+ * Two layouts exist: a source checkout (`packages/bundle/web-app/presets/...`) and an
+ * installed tree (`@deepseek-ai/dsh-web-app/presets/...`). `$DSH_STANDARD_FILE` names
+ * the file outright, which is how the gates derive from the version the user actually
+ * runs — a preset copied from an older checkout silently drops tools the installation
+ * mounts (`schedule_*` arrived in 0.2.1 that way).
+ * @returns the preset file and the directory quoted in the generated header.
+ */
 export function standardSource() {
+  const explicit = process.env.DSH_STANDARD_FILE
+  if (explicit !== undefined && explicit !== '') {
+    if (!existsSync(explicit)) throw new Error(`DSH_STANDARD_FILE does not exist: ${explicit}`)
+    return { repo: dirname(explicit), file: explicit }
+  }
   const repo = process.env.DSH_REPO
     ?? resolve(ROOT, '..', 'deepseek-harness')
-  const file = join(repo, STANDARD_RELATIVE)
-  if (!existsSync(file)) {
-    throw new Error(`standard preset not found at ${file} — set DSH_REPO to a dsh checkout`)
-  }
-  return { repo, file }
+  const checkout = join(repo, STANDARD_RELATIVE)
+  if (existsSync(checkout)) return { repo, file: checkout }
+  const installed = join(repo, STANDARD_INSTALLED_RELATIVE)
+  if (existsSync(installed)) return { repo, file: installed }
+  throw new Error(
+    `standard preset not found at ${checkout} or ${installed} — set DSH_REPO to a dsh checkout `
+    + 'or DSH_STANDARD_FILE to the installed presets/standard.patch.yml',
+  )
 }
 
 /** The `config.plugins` child-list text of the shipped standard row, verbatim. */
@@ -105,6 +128,23 @@ export function invertShellGating(plugins) {
     substitutions.push({ original, patched })
   }
   return { patched: current, substitutions }
+}
+
+/**
+ * Drop the persona `suffix:` line that the shipped standard carries.
+ *
+ * DSH 0.2.1 removed the loop's built-in `cwd` prompt variable, so a `{{cwd}}`
+ * reference fails prompt assembly before any model request. The current-directory
+ * fact now arrives as a required runtime context from the working-directory service,
+ * which makes the suffix redundant as well as fatal. The source preset on a 0.2.1
+ * checkout no longer contains the line; this also covers deriving from an older one.
+ * @param plugins - the shipped child list.
+ * @returns the list without a persona `suffix` line, and the line that was removed.
+ */
+export function dropPersonaSuffix(plugins) {
+  const line = plugins.match(/^(\s+)suffix: [^\n]*\{\{cwd\}\}[^\n]*$/m)?.[0]
+  if (line === undefined) return { patched: plugins, removed: '' }
+  return { patched: plugins.replace(`${line}\n`, ''), removed: line }
 }
 
 /**
@@ -163,15 +203,37 @@ function revisionOf(repo) {
 }
 
 /**
+ * Drop `tool-subagent` config keys DSH 0.2.1 removed.
+ *
+ * `backgroundMode` and `enableRunInBackground` are gone from the schema. Schemastery
+ * keeps undeclared keys (`merge(result, data)`), so a leftover value reaches `apply()`
+ * as dead configuration rather than a startup error — which is worse for a preset
+ * because it silently promises behaviour the runtime no longer has. A 0.2.1 source
+ * preset no longer carries them; this also covers deriving from an older checkout.
+ * @param plugins - the shipped child list.
+ * @returns the list without the retired keys, and the lines that were removed.
+ */
+export function dropRetiredSubagentKeys(plugins) {
+  const removed = []
+  const patched = plugins.replace(/^ {18}(backgroundMode|enableRunInBackground): [^\n]*\n/gm, (line) => {
+    removed.push(line.trimEnd())
+    return ''
+  })
+  return { patched, removed }
+}
+
+/**
  * Render the whole bundle patch.
  * @param parts - the shipped child list, the persona text, the extra row groups,
  *   the upstream source text and its checkout.
  * @returns the patch file content.
  * @throws when a change reaches bytes outside what this bundle is allowed to touch.
  */
-export function render({ plugins, persona, delegationRows = [], topRows = [], sourceText, repo }) {
-  const { patched: swapped, block } = swapPersonaPrefix(plugins, persona)
-  if (swapped.replace(block, plugins.match(/^(\s+)prefix: (.*)$/m)[0]) !== plugins) {
+export function render({ plugins, persona, delegationRows = [], topRows = [], sourceText, sourceFile, repo }) {
+  const { patched: withoutSuffix, removed: suffixLine } = dropPersonaSuffix(plugins)
+  const { patched: source } = dropRetiredSubagentKeys(withoutSuffix)
+  const { patched: swapped, block } = swapPersonaPrefix(source, persona)
+  if (swapped.replace(block, source.match(/^(\s+)prefix: (.*)$/m)[0]) !== source) {
     throw new Error('persona substitution touched bytes outside the prefix line')
   }
   const { patched: withShell, substitutions } = invertShellGating(swapped)
@@ -190,12 +252,12 @@ export function render({ plugins, persona, delegationRows = [], topRows = [], so
   }
   const countJs = text => (text.match(/!!js/g) || []).length
   const removedJs = substitutions.reduce((sum, s) => sum + countJs(s.original) - countJs(s.patched), 0)
-  const expectedTags = countJs(plugins) - removedJs + countJs(delegationRows.join('\n')) + countJs(topRows.join('\n'))
+  const expectedTags = countJs(source) - removedJs + countJs(delegationRows.join('\n')) + countJs(topRows.join('\n'))
   if (countJs(withDelegation) !== expectedTags) {
-    throw new Error(`loader tag count changed: expected ${expectedTags} (standard's ${countJs(plugins)} plus this bundle's rows), found ${countJs(withDelegation)}`)
+    throw new Error(`loader tag count changed: expected ${expectedTags} (standard's ${countJs(source)} plus this bundle's rows), found ${countJs(withDelegation)}`)
   }
   const ids = (text, indent) => [...text.matchAll(new RegExp(`^ {${indent}}- id: (\\S+)$`, 'gm'))].map(m => m[1])
-  if (ids(withDelegation, 10).join(',') !== ids(plugins, 10).join(',')) {
+  if (ids(withDelegation, 10).join(',') !== ids(source, 10).join(',')) {
     throw new Error('top-level child row ids changed; only the persona text and appended rows may differ')
   }
   const sha = createHash('sha256').update(sourceText).digest('hex')
@@ -203,7 +265,7 @@ export function render({ plugins, persona, delegationRows = [], topRows = [], so
   return [
     '# GENERATED — do not hand-edit. The only writer is `npm run preset`',
     `#   persona text : text/persona.md (${personaChars} chars)`,
-    `#   derived from : ${STANDARD_RELATIVE} @ ${repo} (r${revisionOf(repo)})`,
+    `#   derived from : ${basename(sourceFile)} @ ${repo} (r${revisionOf(repo)})`,
     `#   source sha256: ${sha}`,
     '#',
     '# The child list is standard\'s list with these changes: the persona',
@@ -213,6 +275,11 @@ export function render({ plugins, persona, delegationRows = [], topRows = [], so
     '# the delegation group, and this bundle\'s own plugin rows are appended at the end.',
     '# The bundle-patch format offers no inheritance and no deep merge, so the whole list',
     '# must be restated here.',
+    '#',
+    '# Each named subagent is a plain tool-subagent row with no `agentPreset`: DSH 0.2.1',
+    '# removed `persona`/`toolFilter` and a child preset REPLACES the parent inheritance',
+    '# rather than extending it, so a delegating child joins the parent preset and gets',
+    '# its full tool set, its persona, and the `send_message` return channel.',
     '- insert:',
     `    - id: ${PRESET.rowId}`,
     "      name: '@deepseek-ai/dsh-agent-preset'",
@@ -227,52 +294,19 @@ export function render({ plugins, persona, delegationRows = [], topRows = [], so
   ].join('\n')
 }
 
-/**
- * Validate every statically-listed subagent tool name against the roster a live boot
- * recorded.
- *
- * A name the composition does not mount throws out of `tools.restrict()` when the
- * preset is acquired, and one bad row makes the WHOLE preset unbindable — which in the
- * Web UI reads as a mode that silently refuses to start. So it is caught here, from the
- * rows about to be written, rather than discovered by a user.
- * @param rows - the generated indent-14 delegation rows.
- * @returns the recorded roster.
- */
-export function assertFilterNames(rows) {
-  if (!existsSync(ROSTER_FILE)) {
-    throw new Error(`no recorded roster at ${ROSTER_FILE} — run \`ZCODE_RECORD_ROSTER=1 npm run verify\` against a dsh installation first`)
-  }
-  const roster = JSON.parse(readFileSync(ROSTER_FILE, 'utf8'))
-  // Parsed from the rows rather than kept as a second list, so adding a row cannot
-  // slip an unchecked name past this gate. `bash` is the one name beyond the recorded
-  // standard roster: the generated patch mounts it on every platform via SHELL_GATE.
-  const names = rows.filter(line => /^ {22}- [a-z][a-z_]*$/.test(line)).map(line => line.trim().slice(2))
-  const shellAlwaysMounted = Object.entries(SHELL_GATE)
-    .filter(([, value]) => value === 'false')
-    .map(([id]) => id.replace(/^tool-/, ''))
-  const mountable = new Set([...roster.tools, ...shellAlwaysMounted])
-  const unknown = names.filter(name => !mountable.has(name))
-  if (unknown.length > 0) {
-    throw new Error(`subagent filters name tools the composition does not mount: ${unknown.join(', ')}`)
-  }
-  if (names.length === 0) throw new Error('no static filter names found in the delegation rows')
-  return roster
-}
-
 const isMain = process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(import.meta.filename)
 if (isMain) {
   const persona = readFileSync(PERSONA_FILE, 'utf8')
   if (persona.trim().length === 0) throw new Error('text/persona.md is empty')
   const { repo, file } = standardSource()
   const sourceText = readFileSync(file, 'utf8')
-  const rows = layerDelegationRows()
-  assertFilterNames(rows)
   const args = {
     plugins: standardPlugins(sourceText),
     persona,
-    delegationRows: rows,
+    delegationRows: layerDelegationRows(),
     topRows: layerTopRows(),
     sourceText,
+    sourceFile: file,
     repo,
   }
   const out = render(args)

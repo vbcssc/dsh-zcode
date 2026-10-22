@@ -8,6 +8,17 @@
  * Indentation is load-bearing: `config.plugins` children sit at 10 spaces, rows inside
  * a `cordis:group`'s `config` at 14, and their keys at 16. A block scalar under a
  * 16-space key puts its body at 18.
+ *
+ * The named subagents are plain `@deepseek-ai/dsh-tool-subagent` rows. DSH 0.2.1
+ * removed `persona`, `toolFilter`, and `backgroundMode` from that package's config
+ * (verified against the installed 0.2.1 `Config`: only `provider`, `toolName`,
+ * `modelSelectionSettings`, `agentOptions`, `agentPreset`, `allowedAgentPresets`, and
+ * `maxDepth` remain). A row with no `agentPreset` joins the PARENT's preset through
+ * `applyChildComposition`'s `composeFrom` path, so the child inherits the parent's whole
+ * tool set and persona. That is the original dsh behaviour and the reason these rows
+ * carry no separate preset: a child preset would replace the inheritance, not extend
+ * it, and every tool it needs would have to be restated (which is how an earlier
+ * revision silently dropped the child's `send_message` return channel).
  */
 
 import { readFileSync } from 'node:fs'
@@ -29,6 +40,16 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * them, and their `continue:false` halts have no run-level effect. A native row
  * subscribes to `agent/turn-stopping` directly and steers, which is the one
  * mechanism the harness documents as forcing another step.
+ *
+ * The evidence-plan row is the item-level counterpart to that guard. The guard
+ * asks one question at the turn boundary: did a file-changing turn run any
+ * successful command? This row adds `plan_write`, which asks a sharper one per
+ * plan item: did this turn run the specific command that item named as its
+ * proof? The two are complementary rather than redundant — the guard catches a
+ * turn that verified nothing, the plan catches an item declared done on the
+ * strength of some other command. It is mounted through the package's own
+ * `presets` config default (`['zcode']`), so the row is profile-wide but the
+ * tool only reaches sessions whose durable header reports this preset.
  * @returns the appended indent-10 rows.
  */
 export function topRows() {
@@ -60,65 +81,46 @@ export function personaSource(name) {
 }
 
 /**
- * Render a persona as a YAML block-scalar key plus its body lines.
+ * Render a persona as a `prefix:` block scalar plus its body lines.
  *
- * Block scalar with strip chomping (`|-`) so no trailing newline survives the parse,
- * and blank source lines stay truly empty — a line of spaces would not round-trip.
+ * `@deepseek-ai/dsh-persona` names its required field `prefix`; it is rendered as the
+ * `deployment:persona-prefix` section. Block scalar with strip chomping (`|-`) so no
+ * trailing newline survives the parse, and blank source lines stay truly empty — a
+ * line of spaces would not round-trip.
  * @param text - the persona body.
- * @returns the `persona:` key line and the indented body lines.
+ * @param indent - column of the `prefix:` key.
+ * @returns the `prefix:` key line and the indented body lines.
  */
-function personaLines(text) {
-  return ['                  persona: |-', ...text.split('\n').map(line => `                    ${line}`)]
+function personaLines(text, indent) {
+  const pad = ' '.repeat(indent)
+  const bodyPad = ' '.repeat(indent + 2)
+  return [`${pad}prefix: |-`, ...text.split('\n').map(line => (line.length > 0 ? `${bodyPad}${line}` : ''))]
 }
 
 /**
- * The named subagent rows ZCode has and dsh's shipped preset does not.
+ * The named subagents this bundle adds, as plain `tool-subagent` rows.
  *
- * Both sit inside the `delegation` group at indent 14. `provider: spawn` is the local
- * child-process driver the shipped `tool-subagent` row already uses. `maxDepth: 1` is
- * what makes "you cannot delegate further" a fact rather than advice.
- *
- * The filter names `bash` statically: this bundle's patch inverts the shipped
- * standard's shell gates (`SHELL_GATE` in `make-preset.mjs`), so `tool-bash` is mounted
- * on every platform and `tool-pwsh` on none. On win32 the bash executor is the
- * profile's Git Bash bundle (`dsh-git-bash` or equivalent) — INSTALL requires it, and a
- * profile without it mounts the tool but cannot run it. Every other name here is
- * checked against the live recorded roster (see `roster.standard.json`).
- *
- * The general-purpose row declares NO `toolFilter`: an absent filter leaves the child
- * with the parent's full tool set, which is the faithful translation of ZCode's
- * `tools: ["*"]` and is strictly smaller than restating names that drift per release.
- * @returns the indent-14 rows, with persona bodies read from `text/personas/`.
+ * Each row names the tool the parent sees (`subagent_<name>`) and caps depth at 1, so
+ * the child cannot delegate further. Nothing else is declared: the child inherits the
+ * parent's preset — tools, persona, and the `send_message` return channel — exactly as
+ * a shipped `subagent` row does. `provider: spawn` is the in-process driver the shipped
+ * row already uses.
+ * @returns the indent-14 rows.
  */
 export function delegationRows() {
-  const rows = [
-    '              - id: tool-subagent-zcode-explore',
-    "                name: '@deepseek-ai/dsh-tool-subagent'",
-    '                config:',
-    '                  provider: spawn',
-    '                  toolName: subagent_explore',
-    '                  backgroundMode: continuable',
-    '                  maxDepth: 1',
-    '                  toolFilter:',
-    '                    allow:',
-    '                      - bash',
-    '                      - glob',
-    '                      - grep',
-    '                      - read',
-    '                      - web_fetch',
-    '                      - web_search',
-    ...personaLines(personaSource('explore')),
-    '              - id: tool-subagent-zcode-general',
-    "                name: '@deepseek-ai/dsh-tool-subagent'",
-    '                config:',
-    '                  provider: spawn',
-    '                  toolName: subagent_general',
-    '                  backgroundMode: continuable',
-    '                  maxDepth: 1',
-    ...personaLines(personaSource('general')),
-  ]
+  const rows = []
+  for (const name of SUBAGENT_PERSONAS) {
+    rows.push(
+      `              - id: tool-subagent-zcode-${name}`,
+      "                name: '@deepseek-ai/dsh-tool-subagent'",
+      '                config:',
+      '                  provider: spawn',
+      `                  toolName: subagent_${name}`,
+      '                  maxDepth: 1',
+    )
+  }
   return rows
 }
 
-/** The short names of the personas this bundle mounts, for existence checks. */
+/** The short names of the named subagents this bundle mounts. */
 export const SUBAGENT_PERSONAS = ['explore', 'general']

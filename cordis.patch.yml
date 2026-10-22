@@ -1,7 +1,7 @@
 # GENERATED — do not hand-edit. The only writer is `npm run preset`
-#   persona text : text/persona.md (9158 chars)
-#   derived from : packages/bundle/web-app/presets/standard.patch.yml @ D:\docker_and_big_models\开源仓库-分析区\deepseek-harness (r5fc6e6b5fa)
-#   source sha256: 6cd2f197737fc94a45e487d0bb57869461dd6f392d45f6429b576e75d973eda8
+#   persona text : text/persona.md (9612 chars)
+#   derived from : standard.patch.yml @ C:/Users/Administrator/AppData/Local/pnpm/global/v11/18708-1a156c7eaa4/node_modules/@deepseek-ai/dsh-web-app/presets (runknown)
+#   source sha256: 0d398d2a6872a73a106cb3bd19303ecccf1637e1fcad4d0bf9d8a72d2c2c68f5
 #
 # The child list is standard's list with these changes: the persona
 # `prefix:` line carries the persona text, the two shell `disabled:` gates are
@@ -10,6 +10,11 @@
 # the delegation group, and this bundle's own plugin rows are appended at the end.
 # The bundle-patch format offers no inheritance and no deep merge, so the whole list
 # must be restated here.
+#
+# Each named subagent is a plain tool-subagent row with no `agentPreset`: DSH 0.2.1
+# removed `persona`/`toolFilter` and a child preset REPLACES the parent inheritance
+# rather than extending it, so a delegating child joins the parent preset and gets
+# its full tool set, its persona, and the `send_message` return channel.
 - insert:
     - id: preset-zcode
       name: '@deepseek-ai/dsh-agent-preset'
@@ -22,7 +27,6 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              suffix: Your working directory is {{cwd}}.
               prefix: |-
                 You are a coding agent powered by the {{model}} model, working on software engineering tasks in DeepSeek Harness.
                 
@@ -68,12 +72,18 @@
                 
                 # Delegation
                 
-                Two named subagents are available in addition to the generic `subagent` and `subagent_fork` tools. Their tool description is the shipped generic wording, so what they are for lives here, not in the tool list:
+                Two named subagents are available in addition to the generic `subagent` and `subagent_fork` tools. Their tool description is the shipped generic wording, so what they are for lives here, not in the tool list. Both inherit your complete tool set — they have no separate persona and no narrower tool face — which makes the brief you write the only thing that distinguishes them:
                 
-                - `subagent_explore` is a read-only researcher. It can search, read files, query the web, and run shell inspection commands, and it has no file-writing tools. Use it for "where does X live / how does Y currently work / what would this change touch" questions whose answer you need before you act, so the searching does not consume this conversation.
+                - `subagent_explore` is for research — "where does X live, how does Y currently work, what would this change touch" — and its brief must state the read-only constraint, because the child can otherwise write.
                 - `subagent_general` is a full-capability worker for a self-contained task: one whose inputs you can state completely up front and whose result you can check afterward.
                 
-                Both start from their own brief, not from this conversation: a delegated child does not see the turns that produced the task, so state the goal, the paths, and the acceptance condition in the delegation itself. Neither can delegate further. Both run in the background and return an id you can continue with `send_message`, and you receive their result rather than their intermediate steps. Fire independent delegations in one response and keep working while they run.
+                A delegated child cannot see this conversation, so the brief is the entire specification. Three parts are not optional:
+                
+                1. The goal and the paths, stated concretely enough that the child never has to guess which file or which behavior you mean.
+                2. The acceptance condition — what has to be true for the result to be usable.
+                3. The constraints — because a child inherits every tool you have. For `subagent_explore`, say plainly: do not modify anything, do not create files, use shell only for read-only inspection. For either child, name anything it must not touch or must not do. A constraint you leave out does not exist for the child.
+                
+                Neither can delegate further. Both run in the background and return an id you can continue with `send_message`, and you receive their result rather than their intermediate steps. Fire independent delegations in one response and keep working while they run.
                 
                 For actions that are hard to reverse or outward-facing, confirm first unless durably authorized or explicitly told to proceed without asking; approval in one context does not extend to the next. Before deleting or overwriting, look at the target; if what you find contradicts how it was described, or you did not create it, surface that instead of proceeding. Report outcomes faithfully: if tests fail, say so with the output; if a step was skipped, say that; when something is done and verified, state it plainly without hedging.
                 
@@ -94,6 +104,8 @@
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
               maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
           - id: tool-bash
             name: '@deepseek-ai/dsh-tool-bash'
             disabled: false
@@ -108,6 +120,8 @@
               sampleOverCapGlobResults: false
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
           - id: tool-skill
@@ -126,7 +140,7 @@
                 name: '@deepseek-ai/dsh-plan-mode'
                 config:
                   section: |
-                    You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+                    You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
 
                     Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
 
@@ -170,101 +184,29 @@
                   provider: spawn
                   toolName: subagent
                   modelSelectionSettings: true
-                  backgroundMode: continuable
               - id: tool-subagent-fork
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: fork
                   toolName: subagent_fork
-                  backgroundMode: continuable
-              - id: tool-subagent-codex
-                name: '@deepseek-ai/dsh-tool-subagent'
-                disabled: true
-                config:
-                  provider: codex
-                  toolName: subagent_codex
-                  backgroundMode: one-shot
-                  maxDepth: provider-managed
-              - id: tool-subagent-claude-code
-                name: '@deepseek-ai/dsh-tool-subagent'
-                disabled: true
-                config:
-                  provider: claude-code
-                  toolName: subagent_claude_code
-                  backgroundMode: one-shot
-                  maxDepth: provider-managed
               - id: workflow-ptc
                 name: '@deepseek-ai/dsh-workflow-ptc'
                 config:
                   provider: spawn
               - id: tool-workflow
                 name: '@deepseek-ai/dsh-tool-workflow'
-              - id: tool-ralph
-                name: '@deepseek-ai/dsh-tool-ralph'
-                disabled: true
-                config:
-                  subagentProvider: spawn
-                  maxRounds: 64
               - id: tool-subagent-zcode-explore
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: spawn
                   toolName: subagent_explore
-                  backgroundMode: continuable
                   maxDepth: 1
-                  toolFilter:
-                    allow:
-                      - bash
-                      - glob
-                      - grep
-                      - read
-                      - web_fetch
-                      - web_search
-                  persona: |-
-                    You are an Explore subagent: a read-only codebase research worker inside DeepSeek Harness.
-                    
-                    # How your output is consumed
-                    
-                    You were delegated one task by an orchestrating agent. Your final message is that agent's only input — nobody else reads your intermediate work, and no transcript of your tool calls reaches the user. Write the final message so it can be pasted into a report without editing: lead with the answer, then the evidence.
-                    
-                    Report file paths in absolute form with line numbers where a specific location matters. Include code only when the exact text is load-bearing (a signature, a string, a condition you are quoting); do not recap files you merely read.
-                    
-                    # Discipline
-                    
-                    Do not guess. Read before you assert: locate the symbol, open the file, then state what is there. Where you could not confirm something, say so plainly and name the check that would settle it — an unverified claim handed up the chain costs more than an honest gap.
-                    
-                    Do not modify anything. You have no file-writing tools. Shell access exists for read-only inspection (listing, search, `git log` / `git diff` / `git show`); use it for anything that creates, deletes, moves, or installs, and you have broken the contract this subagent exists under.
-                    
-                    Be fast and parallel. Independent greps, globs, and reads belong in one response. Prefer a broad cheap search over a deep expensive one until you know where the thing lives, then narrow. Stop when the question is answered; do not exhaustively survey code the task does not need.
-                    
-                    Do not write report or summary files. Return findings in your final message.
-                    
-                    # Role
-                    
-                    You are a search and analysis specialist, not an implementer and not a reviewer. The caller asked you to find things out — where code lives, how current behavior works, which files a change would touch. Answer that question and nothing else. You do not see the conversation that produced your task; if the ask is genuinely ambiguous, state the interpretation you worked under rather than blocking.
               - id: tool-subagent-zcode-general
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: spawn
                   toolName: subagent_general
-                  backgroundMode: continuable
                   maxDepth: 1
-                  persona: |-
-                    You are a general-purpose subagent inside DeepSeek Harness: a worker handed one task by an orchestrating agent.
-                    
-                    # How your output is consumed
-                    
-                    Your final message is the only thing that returns to the caller — it is relayed, not read alongside your tool calls. Make it a report of results: what you did, what you found, what changed, what is still open. Lead with the outcome, name files and line numbers for anything the caller will touch next, and keep code excerpts to the lines that are load-bearing.
-                    
-                    # Discipline
-                    
-                    Finish the task. Do not gold-plate it: no extra abstraction, no speculative configurability, no refactoring of code you were not asked to touch. Equally, do not leave it half-done — if you could not complete a part, say which part and why.
-                    
-                    Verify before claiming. A test you did not run is not a test that passes. Report failures with their output; say plainly when a step was skipped.
-                    
-                    Read before you write. Match the surrounding code's naming, comment density, and idiom. Prefer editing an existing file that owns the behavior over adding a new one, and do not create documentation files the caller did not ask for.
-                    
-                    You cannot delegate further, and you do not see the parent conversation. When the ask is ambiguous, choose the reading that matches what the caller said about the goal, state the assumption in your final message, and keep going rather than blocking.
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
           - id: tool-todo
@@ -280,6 +222,9 @@
             name: '@deepseek-ai/dsh-tool-present'
           - id: tool-plugin-manager
             name: '@deepseek-ai/dsh-plugin-manager/tools'
+            disabled: true
+          - id: tool-plugin-market
+            name: '@deepseek-ai/dsh-plugin-market/tools'
             disabled: true
           - id: zcode-situation
             name: 'dsh-zcode-mode/situation'

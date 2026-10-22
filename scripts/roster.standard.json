@@ -18,14 +18,20 @@
     "pwsh",
     "read",
     "read_image",
+    "schedule_create",
+    "schedule_delete",
+    "schedule_list",
+    "schedule_update",
     "send_message",
     "skill",
+    "subagent",
     "subagent_fork",
     "todo_write",
     "update_goal",
     "web_fetch",
     "web_search",
     "workflow",
+    "working_directory",
     "write"
   ]
 }
