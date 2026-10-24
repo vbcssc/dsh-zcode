@@ -14,17 +14,9 @@ dsh plugin --profile web add file:D:/docker_and_big_models/开源仓库-分析�
 - **win32 前置条件：profile 里已有直替 bash 执行器的 bundle**（本机为 `dsh-git-bash`，提供
   `dsh-bash-local`，与 `standard-gitbash` 预设共用同一条依赖）。模式把 shell 门固定反转成
   `bash` 恒挂载、`pwsh` 不挂载；没有该执行器时 `bash` 工具会挂载但调用失败（README 边界 3）。
-- **证据门禁前置条件：profile 里已装 `dsh-evidence-plan`。** 预设末尾追加的那一行
-  `id: zcode-evidence-plan` 只写包名，靠 profile 的 `node_modules` 解析；没装时这一行让整个
-  预设不可挂载，而不是静默少一个工具。
-
-  ```sh
-  dsh plugin --profile <名字> add file:D:/docker_and_big_models/开源仓库-分析区/dsh-evidence-plan
-  ```
-
-  它必须出现在 profile 的 `dependencies` 里，但**不要**加进 `dsh.profile.bundles`——那会让它
-  作为独立 bundle 再挂一次，同一个插件被挂两遍（`agent/created` 触发两次，可能发出两条 steer）。
-  本集成只经由 zcode 的 patch 行挂载一次。
+- **本 bundle 不挂载 `dsh-evidence-plan`。** 0.2.1 下那一行会让整个 zcode 预设不可获取
+  （`agent-preset/invalid`），已从生成器移除。需要 `plan_write` 时应在 profile 里单独接入，
+  不要写回本 bundle 的 preset 行。
 - **必须走 `dsh plugin add`**，不要用裸 `pnpm add`：那只把包写进 `dependencies`，不会选中
   bundle，`dsh.bundle.patch` 指向的 `cordis.patch.yml` 因此永不加载。
 - `file:` 安装是**硬链接**而不是复制：profile 的 `node_modules` 里那份文件与本仓库同 inode。
@@ -62,9 +54,9 @@ UPSTREAM drift 之所以危险：预设的 `config.plugins` 是**整字段覆写
 ## 四、验收（改完必须过）
 
 ```sh
-npm run doctor    # 离线：漂移 + 静态断言 + 子代理/子预设配对（12 项）
-npm run unit      # 处境层：真实 git 探针 + 用出厂插值器验 braceSafe（18 项）
-npm run verify    # 真装真起，读活注册表（18 项）
+npm run doctor    # 离线：漂移 + 静态断言 + 子代理/子预设配对（16 项）
+npm run unit      # 处境层：真实 git 探针 + 用出厂插值器验 braceSafe（19 项）
+npm run verify    # 真装真起，读活注册表（26 项）
 ```
 
 `npm run verify` 需要：一个可启动的 dsh 安装（脚本依次从 `$DSH_INSTALL_ANCHOR`、

@@ -47,11 +47,14 @@ Two named subagents are available in addition to the generic `subagent` and `sub
 - `subagent_explore` is for research — "where does X live, how does Y currently work, what would this change touch" — and its brief must state the read-only constraint, because the child can otherwise write.
 - `subagent_general` is a full-capability worker for a self-contained task: one whose inputs you can state completely up front and whose result you can check afterward.
 
-A delegated child cannot see this conversation, so the brief is the entire specification. Three parts are not optional:
+A delegated child cannot see this conversation, so the brief is the entire specification. Four parts are not optional:
 
 1. The goal and the paths, stated concretely enough that the child never has to guess which file or which behavior you mean.
 2. The acceptance condition — what has to be true for the result to be usable.
 3. The constraints — because a child inherits every tool you have. For `subagent_explore`, say plainly: do not modify anything, do not create files, use shell only for read-only inspection. For either child, name anything it must not touch or must not do. A constraint you leave out does not exist for the child.
+4. The reporting cadence — tell the child to message you the moment it finds something that changes what you should do next, instead of saving it for the final summary.
+
+Delegation is a two-way channel while the child runs. When you learn something that changes what it should do — a path moved, an assumption disproved, a constraint added — send it to that child with `send_message` immediately, not after its result arrives; letting it keep working from a premise you know is stale wastes the run. The same rule binds you when you are the delegated child: message your parent the moment you find something that changes what it should do next, instead of saving it for the final summary. A mid-task message is not a result and does not end the sender's turn; the final result still arrives through the normal return.
 
 Neither can delegate further. Both run in the background and return an id you can continue with `send_message`, and you receive their result rather than their intermediate steps. Fire independent delegations in one response and keep working while they run.
 

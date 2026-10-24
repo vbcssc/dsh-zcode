@@ -169,5 +169,21 @@ check('persona pairs subagent_explore with its read-only brief constraint',
   /read-only/i.test(exploreReadOnlyPairing),
   exploreReadOnlyPairing === '' ? 'tool name absent' : exploreReadOnlyPairing.trim().slice(0, 140))
 
+// Children inherit this persona, so one text addresses both roles. Two failures matter
+// for a long delegation: a parent that never tells a running child its premise changed,
+// and a child that saves every finding for the final report. Each half is anchored to
+// the paragraph that carries the rule, so deleting either direction turns this red.
+const syncParagraph = persona.match(/Delegation is a two-way channel[^]*?(?=\n\n)/)?.[0] ?? ''
+check('persona tells the parent to push a changed premise to a running child immediately',
+  /two-way channel/.test(syncParagraph)
+    && /`send_message` immediately/.test(syncParagraph)
+    && /stale/.test(syncParagraph),
+  syncParagraph === '' ? 'two-way paragraph absent' : syncParagraph.trim().slice(0, 140))
+check('persona tells the delegated child to report mid-task, not only in the final summary',
+  /delegated child: message your parent/.test(syncParagraph)
+    && /final summary/.test(syncParagraph)
+    && /reporting cadence/i.test(persona),
+  syncParagraph === '' ? 'two-way paragraph absent' : syncParagraph.trim().slice(-140))
+
 process.stdout.write(`\ndoctor (${ROOT}): ${failures.length === 0 ? 'ALL PASS' : `${failures.length} FAILURE(S)`}\n`)
 if (failures.length > 0) process.exitCode = 1

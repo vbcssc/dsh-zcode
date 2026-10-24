@@ -49,7 +49,6 @@ import {
 } from './lib/real-channel.mjs'
 
 import { personaSource } from './layers.mjs'
-import { standardSource } from './make-preset.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SCRATCH = join(ROOT, 'scripts', '.verify-home')
@@ -282,7 +281,10 @@ async function runVerify(anchor) {
   // shape rather than disappearing: an event is scope-filtered when its
   // declaration takes `this: Scoped<…>`. `fs/*` takes no `this`, so a listener
   // registered at the root receives it from a preset-scoped tool.
-  const { repo: DSH_REPO } = standardSource()
+  // `standardSource().repo` is the preset's own directory when `DSH_STANDARD_FILE`
+  // names an installed file — not a source checkout. This check reads dsh source, so
+  // resolve the checkout independently of which standard file was used to generate.
+  const DSH_REPO = process.env.DSH_REPO ?? resolve(ROOT, '..', 'deepseek-harness')
   const fsEventsSource = readFileSync(join(DSH_REPO, 'packages/fs/fs/src/index.ts'), 'utf8')
   const scopedFsEvents = ['fs/write-intent', 'fs/edit-intent', 'fs/observed']
     .filter(event => new RegExp(`'${event}'\\s*\\(\\s*this:\\s*Scoped<`).test(fsEventsSource))

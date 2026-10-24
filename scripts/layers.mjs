@@ -41,15 +41,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * subscribes to `agent/turn-stopping` directly and steers, which is the one
  * mechanism the harness documents as forcing another step.
  *
- * The evidence-plan row is the item-level counterpart to that guard. The guard
- * asks one question at the turn boundary: did a file-changing turn run any
- * successful command? This row adds `plan_write`, which asks a sharper one per
- * plan item: did this turn run the specific command that item named as its
- * proof? The two are complementary rather than redundant — the guard catches a
- * turn that verified nothing, the plan catches an item declared done on the
- * strength of some other command. It is mounted through the package's own
- * `presets` config default (`['zcode']`), so the row is profile-wide but the
- * tool only reaches sessions whose durable header reports this preset.
+ * No row is emitted for `dsh-evidence-plan`: on 0.2.1 a row naming it made the
+ * whole preset unacquirable (`agent-preset/invalid`), so `plan_write` is not part
+ * of this bundle.
  * @returns the appended indent-10 rows.
  */
 export function topRows() {

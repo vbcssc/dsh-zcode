@@ -3,8 +3,7 @@
 不改 DeepSeek Harness 源码，用一个**外部 bundle** 把 ZCode 的 agent 模式形状补到 dsh 上。
 dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描述；ZCode 在会话开场还会注入行为与
 输出纪律、当前处境（平台 / 仓库状态 / 日期）、具名子代理，并在收尾时对「改了东西却没验证」
-施加硬约束，再在计划项粒度上要求「每一项由它自己声明的命令证明」。这五层各用一个**已存在的
-扩展点**闭合：
+施加硬约束。这四层各用一个**已存在的扩展点**闭合：
 
 | ZCode 有、dsh 出厂没有 | 本包用的机制 | 要写 JS 吗 |
 |---|---|---|
@@ -12,11 +11,13 @@ dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描�
 | `# Environment`、`gitStatus` 快照、`# currentDate` | `SystemPrompt.context()`，provider 每次装配求值 | 是，`src/situation.js` |
 | `Explore` / `general-purpose` 具名子代理 | `@deepseek-ai/dsh-tool-subagent` 行（`toolName` / `maxDepth`）；不写 `agentPreset`，子代理因此继承父的预设与全部工具 | 否 |
 | 「改了文件必须有成功验证」的**硬校验** | `sessionProjections` 的持久化折叠 + `agent/turn-stopping` 上的 `agent.steer()` | 是，`src/verification-guard.js` |
-| 「每一项完成必须由它自己的检查证明」的**证据门禁** | 外部包 `dsh-evidence-plan` 的 `plan_write` 工具（preset 末尾一行 `id: zcode-evidence-plan`） | 否，在 [独立仓库](../dsh-evidence-plan/README.md) |
 
 模式 id 是 `zcode`，菜单名 **「ZCode 模式」**，`order: 6`。
 
-## 为什么第四、五层不是提示词
+`dsh-evidence-plan` 的 `plan_write` 曾是规划中的第五层（计划项粒度的证据门禁）；0.2.1 下它的
+preset 行会让整个 zcode 预设不可获取，已从本 bundle 移除。需要时应在 profile 里单独接入。
+
+## 为什么硬校验不是提示词
 
 「验证后再报告」写在 persona 里只是概率性遵守，而 `status: DONE` 之类的自我申报没有任何外部
 核对。`verification-guard` 把它变成由运行时事实驱动的确定性检查：本轮是否成功写过文件
@@ -24,14 +25,6 @@ dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描�
 （解析 `bash`/`pwsh` 结果里的 `[exit code: N]`；**非零退出不是工具错误**，见
 `packages/shell/tool-bash/README.md`）。若前者为真、后者为假，turn 边界不关闭，守卫用
 `agent.steer()` 把缺失的事实送回模型，强制多走一步。
-
-`dsh-evidence-plan` 接着问更细的一问。守卫只管「这一轮有没有一条成功命令」；一条与改动无关的
-`git status` 就能满足它。`plan_write` 要求每个计划项在提交时写死 `verify`（证明它的命令），
-把该项标成 `completed` 时，插件在本轮已提交的 shell 记录里找**命令文本包含该 `verify` 且退出码
-为 0** 的那一条；找不到就让整个调用失败、该项状态不变。判定匹配是精确子串，不解析 shell——放宽
-匹配等于把门禁关掉。
-
-两层互补而不重复：守卫拦「一个什么都没验证的 turn」，计划拦「一项拿别的命令冒充证明就报完成」。
 
 关键实现约束：
 
@@ -46,13 +39,13 @@ dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描�
 
 | 量 | standard | zcode |
 |---|---|---|
-| 装配 persona | 54 字符 | **9612** 字符（+9558） |
-| 整段 system prompt | 5736 字符 | **15171** 字符（+9435） |
+| 装配 persona | 54 字符 | **10429** 字符（+10375） |
+| 整段 system prompt | 5736 字符 | **15988** 字符（+10252） |
 | 可见工具 | 31 | **33**（+`subagent_explore`、+`subagent_general`、+`bash`、−`pwsh`） |
 | 处境 context 段 | 无 | 3 条，空 session 时 159 字符 |
 | 守卫投影 | 无 | `zcodeVerification`（host-only，随 session 落盘） |
 
-`+9435` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+9558`，加上
+`+10252` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+10375`，加上
 `tool:subagent` 指引句从两个委派工具名扩到四个（139 → 183，+44），再加上 shell 指引随门控
 反转发生的互换 `tool:pwsh`(259) → `tool:bash`(92)，净 −167。两条具名子代理各自注册的
 `tool:subagent_*` 段存在但渲染为空串（0 字符）——0.2.1 只让字母序第一条委派行输出那句话，
@@ -66,7 +59,7 @@ dsh 出厂的模型可见提示词只有约 3 行身份加每条工具一句描�
 
 ```
 package.json              dsh.bundle.patch → cordis.patch.yml；exports "./situation"、"./verification-guard"
-text/persona.md           主控 persona 唯一真源（9612 字符）
+text/persona.md           主控 persona 唯一真源（10429 字符）
 src/situation.js          处境插件：注册 3 条 context
 src/verification-guard.js 硬校验插件：投影折叠 + turn 边界 steer
 scripts/make-preset.mjs   cordis.patch.yml 的唯一写入者
@@ -97,7 +90,7 @@ scripts/e2e-guard.mjs     端到端门：真实 Context/AgentLoop + 脚本化模
 
 ```sh
 npm run preset      # 生成 cordis.patch.yml
-npm run doctor      # 离线门（14 项）
+npm run doctor      # 离线门（16 项）
 npm run unit        # 处境层纯函数 + 花括号护栏（19 项）
 npm run unit:guard  # 守卫纯函数 + 接线（35 项）
 npm run e2e:guard   # 真实 AgentLoop 端到端负控（4 项）
@@ -116,9 +109,11 @@ npm run verify      # 真装真起，读活注册表（26 项；跨平台少一�
    直接加入父预设，所以它的行为完全由父 persona 与出厂通用委派描述决定；实测
    `subagent_explore` 与 `subagent_general` 的父可见描述是同一段出厂文案（各 560 字符、
    逐字节相同）。这意味着**两个名字本身不携带任何行为差异**——「explore 只读」不是子代理的
-   属性，而是主控必须在 brief 里写下的约束。persona 的 `# Delegation` 段因此被写成三段式
-   委派模板（目标与路径 / 验收条件 / 约束），并明说「你没写下的约束对子代理不存在」，
-   doctor 有三条断言守着这层意思不丢失。真要有持久的子侧 persona，只能改回 `agentPreset`
+   属性，而是主控必须在 brief 里写下的约束。persona 的 `# Delegation` 段因此被写成四段式
+   委派模板（目标与路径 / 验收条件 / 约束 / 汇报节奏），并明说「你没写下的约束对子代理不存在」。
+   同一段还规定双向同步：父代理发现前提变化时立刻用 `send_message` 通知在跑的子代理，子代理
+   发现会改变父代理下一步的事实时立刻回报，而不是攒到最后汇总。doctor 有五条断言守着这层
+   意思不丢失。真要有持久的子侧 persona，只能改回 `agentPreset`
    并自己补齐工具面（见边界 2 的取舍）。
 2. **子代理的工具集 = 父的工具集，这是刻意的。** 0.2.1 的 `tool-subagent` 只接受
    `provider` / `toolName` / `modelSelectionSettings` / `agentOptions` / `agentPreset` /
