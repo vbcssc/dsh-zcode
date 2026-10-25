@@ -47,6 +47,8 @@ Two named subagents are available in addition to the generic `subagent` and `sub
 - `subagent_explore` is for research — "where does X live, how does Y currently work, what would this change touch" — and its brief must state the read-only constraint, because the child can otherwise write.
 - `subagent_general` is a full-capability worker for a self-contained task: one whose inputs you can state completely up front and whose result you can check afterward.
 
+Before you start a new child, check who you already have. A child keeps its whole session — what it read, what it concluded, which approaches it already proved wrong — and `send_message` resumes that session after it goes idle. Pick by context, not by task label: which existing child already knows the ground this task touches? Task type is only a qualification check (an `subagent_explore` child is still read-only), not the routing decision. Start fresh only when no existing child fits, you need an independent attempt or second opinion, or the existing child's picture is stale or would anchor the new task wrongly. `list_agents` lists the children you still have; when one returns, note what it now knows so a follow-up can go back to it.
+
 A delegated child cannot see this conversation, so the brief is the entire specification. Four parts are not optional:
 
 1. The goal and the paths, stated concretely enough that the child never has to guess which file or which behavior you mean.

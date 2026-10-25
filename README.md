@@ -39,13 +39,13 @@ preset 行会让整个 zcode 预设不可获取，已从本 bundle 移除。需�
 
 | 量 | standard | zcode |
 |---|---|---|
-| 装配 persona | 54 字符 | **10429** 字符（+10375） |
-| 整段 system prompt | 5736 字符 | **15988** 字符（+10252） |
+| 装配 persona | 54 字符 | **11175** 字符（+11121） |
+| 整段 system prompt | 5736 字符 | **16734** 字符（+10998） |
 | 可见工具 | 31 | **33**（+`subagent_explore`、+`subagent_general`、+`bash`、−`pwsh`） |
 | 处境 context 段 | 无 | 3 条，空 session 时 159 字符 |
 | 守卫投影 | 无 | `zcodeVerification`（host-only，随 session 落盘） |
 
-`+10252` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+10375`，加上
+`+10998` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+11121`，加上
 `tool:subagent` 指引句从两个委派工具名扩到四个（139 → 183，+44），再加上 shell 指引随门控
 反转发生的互换 `tool:pwsh`(259) → `tool:bash`(92)，净 −167。两条具名子代理各自注册的
 `tool:subagent_*` 段存在但渲染为空串（0 字符）——0.2.1 只让字母序第一条委派行输出那句话，
@@ -59,7 +59,7 @@ preset 行会让整个 zcode 预设不可获取，已从本 bundle 移除。需�
 
 ```
 package.json              dsh.bundle.patch → cordis.patch.yml；exports "./situation"、"./verification-guard"
-text/persona.md           主控 persona 唯一真源（10429 字符）
+text/persona.md           主控 persona 唯一真源（11175 字符）
 src/situation.js          处境插件：注册 3 条 context
 src/verification-guard.js 硬校验插件：投影折叠 + turn 边界 steer
 scripts/make-preset.mjs   cordis.patch.yml 的唯一写入者
@@ -90,7 +90,7 @@ scripts/e2e-guard.mjs     端到端门：真实 Context/AgentLoop + 脚本化模
 
 ```sh
 npm run preset      # 生成 cordis.patch.yml
-npm run doctor      # 离线门（16 项）
+npm run doctor      # 离线门（17 项）
 npm run unit        # 处境层纯函数 + 花括号护栏（19 项）
 npm run unit:guard  # 守卫纯函数 + 接线（35 项）
 npm run e2e:guard   # 真实 AgentLoop 端到端负控（4 项）
@@ -112,8 +112,10 @@ npm run verify      # 真装真起，读活注册表（26 项；跨平台少一�
    属性，而是主控必须在 brief 里写下的约束。persona 的 `# Delegation` 段因此被写成四段式
    委派模板（目标与路径 / 验收条件 / 约束 / 汇报节奏），并明说「你没写下的约束对子代理不存在」。
    同一段还规定双向同步：父代理发现前提变化时立刻用 `send_message` 通知在跑的子代理，子代理
-   发现会改变父代理下一步的事实时立刻回报，而不是攒到最后汇总。doctor 有五条断言守着这层
-   意思不丢失。真要有持久的子侧 persona，只能改回 `agentPreset`
+   发现会改变父代理下一步的事实时立刻回报，而不是攒到最后汇总。同一段还要求新建子代理前先
+   检查已有子代理：按上下文重合度而不是任务类型选人，用 `send_message` 续用已完成子代理的
+   会话，只有没有合适对象时才新建。doctor 有五条断言守着前一层意思不丢失，另有一条守着复用
+   规则。真要有持久的子侧 persona，只能改回 `agentPreset`
    并自己补齐工具面（见边界 2 的取舍）。
 2. **子代理的工具集 = 父的工具集，这是刻意的。** 0.2.1 的 `tool-subagent` 只接受
    `provider` / `toolName` / `modelSelectionSettings` / `agentOptions` / `agentPreset` /

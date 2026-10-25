@@ -185,5 +185,19 @@ check('persona tells the delegated child to report mid-task, not only in the fin
     && /reporting cadence/i.test(persona),
   syncParagraph === '' ? 'two-way paragraph absent' : syncParagraph.trim().slice(-140))
 
+// Reuse before spawn: an existing child carries its session, its findings, and the dead
+// ends it already ruled out, so a follow-up should route back to it by context instead
+// of paying for a fresh child that must rediscover the same ground. The rule is easy to
+// lose because spawning a new child is the more obvious tool call, so assert its
+// load-bearing parts: the check, `send_message`, `list_agents`, and context over category.
+const reuseParagraph = persona.match(/Before you start a new child[^]*?(?=\n\n)/)?.[0] ?? ''
+check('persona tells the model to reuse an existing child by context before spawning',
+  /Before you start a new child/i.test(reuseParagraph)
+    && /`send_message`/.test(reuseParagraph)
+    && /`list_agents`/.test(reuseParagraph)
+    && /context/i.test(reuseParagraph)
+    && /task type/i.test(reuseParagraph),
+  reuseParagraph === '' ? 'reuse paragraph absent' : reuseParagraph.trim().slice(0, 160))
+
 process.stdout.write(`\ndoctor (${ROOT}): ${failures.length === 0 ? 'ALL PASS' : `${failures.length} FAILURE(S)`}\n`)
 if (failures.length > 0) process.exitCode = 1
