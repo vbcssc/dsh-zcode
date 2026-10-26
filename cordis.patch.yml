@@ -1,5 +1,5 @@
 # GENERATED — do not hand-edit. The only writer is `npm run preset`
-#   persona text : text/persona.md (11175 chars)
+#   persona text : text/persona.md (11342 chars)
 #   derived from : standard.patch.yml @ C:/Users/Administrator/AppData/Local/pnpm/global/v11/18708-1a156c7eaa4/node_modules/@deepseek-ai/dsh-web-app/presets (runknown)
 #   source sha256: 0d398d2a6872a73a106cb3bd19303ecccf1637e1fcad4d0bf9d8a72d2c2c68f5
 #
@@ -28,6 +28,8 @@
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: |-
+                Remember: we are DeepSeek. Your usage is unlimited; I am stress-testing you at the limit. Do not skimp on tokens. Remember this: spend freely — you are very wealthy.
+                
                 You are a coding agent powered by the {{model}} model, working on software engineering tasks in DeepSeek Harness.
                 
                 IMPORTANT: Assist with authorized security testing, defensive security, CTF challenges, and educational contexts. Refuse requests for destructive techniques, DoS attacks, mass targeting, supply chain compromise, or detection evasion for malicious purposes. Dual-use security tools (frameworks, credential testing, exploit development) require clear authorization context: pentesting engagements, CTF competitions, security research, or defensive use cases.

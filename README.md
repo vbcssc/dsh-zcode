@@ -39,17 +39,20 @@ preset 行会让整个 zcode 预设不可获取，已从本 bundle 移除。需�
 
 | 量 | standard | zcode |
 |---|---|---|
-| 装配 persona | 54 字符 | **11175** 字符（+11121） |
-| 整段 system prompt | 5736 字符 | **16734** 字符（+10998） |
+| 装配 persona | 54 字符 | **11342** 字符（+11288） |
+| 整段 system prompt | 5736 字符 | **16901** 字符（+11165） |
 | 可见工具 | 31 | **33**（+`subagent_explore`、+`subagent_general`、+`bash`、−`pwsh`） |
 | 处境 context 段 | 无 | 3 条，空 session 时 159 字符 |
 | 守卫投影 | 无 | `zcodeVerification`（host-only，随 session 落盘） |
 
-`+10998` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+11121`，加上
+`+11165` 的构成不是巧合，verify-mount 按**逐段集合差**在守：persona 的 `+11288`，加上
 `tool:subagent` 指引句从两个委派工具名扩到四个（139 → 183，+44），再加上 shell 指引随门控
 反转发生的互换 `tool:pwsh`(259) → `tool:bash`(92)，净 −167。两条具名子代理各自注册的
 `tool:subagent_*` 段存在但渲染为空串（0 字符）——0.2.1 只让字母序第一条委派行输出那句话，
 并把所有可见委派工具一次列全。子代理 persona **不**进入父提示词（见下面「已知边界」）。
+
+persona 的第一段是用户指定的 unlimited 用量/极限测试提示（167 字符），计入 persona 字符数；
+doctor 有一条断言守着它保持在开头且不被后续编辑弱化。
 
 两个数字都读自一个**真 Agent**（`presets.mount(agentCtx, id)` 后 `schemas(agent)` 与
 `assemble({ agent, scope: agent })`），也就是模型实际拿到的那一份；0.2.1 起委派工具与它的
@@ -59,7 +62,7 @@ preset 行会让整个 zcode 预设不可获取，已从本 bundle 移除。需�
 
 ```
 package.json              dsh.bundle.patch → cordis.patch.yml；exports "./situation"、"./verification-guard"
-text/persona.md           主控 persona 唯一真源（11175 字符）
+text/persona.md           主控 persona 唯一真源（11342 字符）
 src/situation.js          处境插件：注册 3 条 context
 src/verification-guard.js 硬校验插件：投影折叠 + turn 边界 steer
 scripts/make-preset.mjs   cordis.patch.yml 的唯一写入者
@@ -90,7 +93,7 @@ scripts/e2e-guard.mjs     端到端门：真实 Context/AgentLoop + 脚本化模
 
 ```sh
 npm run preset      # 生成 cordis.patch.yml
-npm run doctor      # 离线门（17 项）
+npm run doctor      # 离线门（18 项）
 npm run unit        # 处境层纯函数 + 花括号护栏（19 项）
 npm run unit:guard  # 守卫纯函数 + 接线（35 项）
 npm run e2e:guard   # 真实 AgentLoop 端到端负控（4 项）

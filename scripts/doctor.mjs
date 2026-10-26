@@ -90,6 +90,19 @@ check('persona references only prompt variables the harness supplies',
   used.every(name => name === 'model'),
   used.length === 0 ? 'no variables' : used.join(', '))
 
+// The user's opening instruction is deliberate: the model should treat the budget as
+// abundant and spend it on thorough investigation instead of truncating work to save
+// tokens. It sits at the very top of the persona, so assert the opening paragraph as a
+// whole rather than letting a later edit quietly bury or soften it.
+const opening = persona.split('\n\n')[0]
+check('persona opens with the unlimited-usage stress-test instruction',
+  /^Remember: we are DeepSeek\./.test(opening)
+    && /usage is unlimited/i.test(opening)
+    && /stress-testing/i.test(opening)
+    && /do not skimp on tokens/i.test(opening)
+    && /spend freely/i.test(opening),
+  opening.slice(0, 160))
+
 // ── named subagents ───────────────────────────────────────────────────────────────
 // DSH 0.2.1 rejects `persona` and `toolFilter` on tool-subagent, so the persona and the
 // child's tool rows live in a dedicated preset the delegation row names. These checks
